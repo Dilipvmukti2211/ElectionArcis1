@@ -1,0 +1,5 @@
+# Ignore config.env to avoid pushing secrets
+arcis_backend_R-D/config/config.env
+arcis_frontend_R-D/config/config.env
+node_modules/
+.env
