@@ -3,3 +3,4 @@ arcis_backend_R-D/config/config.env
 arcis_frontend_R-D/config/config.env
 node_modules/
 .env
+arcis_backend_R-D/config/config.env
