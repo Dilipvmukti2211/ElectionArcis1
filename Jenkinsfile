@@ -51,6 +51,7 @@ pipeline {
                 echo 'Deploying frontend to server...'
                 sh """
                     ssh $DEPLOY_USER@$DEPLOY_HOST '
+                        # Ensure folder exists and is writable
                         sudo mkdir -p $FRONTEND_DIR
                         sudo chown -R $DEPLOY_USER:$DEPLOY_USER $FRONTEND_DIR
                         rm -rf $FRONTEND_DIR/*
@@ -129,7 +130,7 @@ Description=ElectionArcis Backend Service
 After=network.target
 
 [Service]
-User=deploy
+User=$DEPLOY_USER
 WorkingDirectory=$BACKEND_DIR
 ExecStart=/usr/bin/env node server.js
 Restart=always
