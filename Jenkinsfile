@@ -51,7 +51,7 @@ pipeline {
                 echo 'Deploying frontend to server...'
                 sh """
                     ssh $DEPLOY_USER@$DEPLOY_HOST \\
-                    "sudo mkdir -p $FRONTEND_DIR && sudo rm -rf $FRONTEND_DIR/*"
+                    "sudo mkdir -p $FRONTEND_DIR && sudo chown -R $DEPLOY_USER:$DEPLOY_USER $FRONTEND_DIR && rm -rf $FRONTEND_DIR/*"
                     scp -r $PROJECT_DIR/arcis_frontend_R-D/build/* $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_DIR/
                 """
             }
@@ -68,7 +68,7 @@ pipeline {
                     fi
 
                     FRONTEND_CONF=/etc/nginx/sites-available/electionarcis
-                    sudo bash -c "cat > \$FRONTEND_CONF" << 'EOL'
+                    sudo bash -c "cat > \$FRONTEND_CONF" << EOL
 server {
     listen 80;
     server_name _;
@@ -102,7 +102,8 @@ EOL
             steps {
                 echo 'Deploying backend to server...'
                 sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST "rm -rf $BACKEND_DIR/*"
+                    ssh $DEPLOY_USER@$DEPLOY_HOST \\
+                    "sudo mkdir -p $BACKEND_DIR && sudo chown -R $DEPLOY_USER:$DEPLOY_USER $BACKEND_DIR && rm -rf $BACKEND_DIR/*"
                     scp -r $PROJECT_DIR/arcis_backend_R-D/* $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_DIR/
                 """
             }
@@ -116,15 +117,15 @@ EOL
                     'SERVICE_FILE=/etc/systemd/system/electionarcis.service
 
                     if [ ! -f \$SERVICE_FILE ]; then
-                        sudo bash -c "cat > \$SERVICE_FILE" << 'EOL'
+                        sudo bash -c "cat > \$SERVICE_FILE" << EOL
 [Unit]
 Description=ElectionArcis Backend Service
 After=network.target
 
 [Service]
-User=deploy
+User=$DEPLOY_USER
 WorkingDirectory=$BACKEND_DIR
-ExecStart=\$(which node) server.js
+ExecStart=$(which node) server.js
 Restart=always
 Environment=NODE_ENV=$NODE_ENV
 Environment=PORT=$PORT
