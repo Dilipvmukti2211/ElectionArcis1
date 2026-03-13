@@ -1,78 +1,91 @@
-pipeline {
-    agent any
+#!/bin/bash
+set -e
 
-    environment {
-        DEPLOY_USER = 'deploy'
-        DEPLOY_HOST = 'fail.vmukti.com'
-        FRONTEND_DIR = '/home/vmukti/electionfrontend'
-        BACKEND_DIR = '/home/vmukti/electionbackend'
-        GIT_REPO = 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
-        PROJECT_DIR = 'ElectionArcis'
-        NODE_ENV = 'production'
-        PORT = '3000'
-    }
+# -----------------------
+# Config
+# -----------------------
+PROJECT_DIR=/home/vmukti/ElectionArcis
+FRONTEND_DIR=/home/vmukti/electionfrontend
+BACKEND_DIR=/home/vmukti/electionbackend
+GIT_REPO=https://github.com/Dilipvmukti2211/ElectionArcis1.git
+NODE_ENV=production
+PORT=3000
 
-    stages {
-        stage('Clone Project') {
-            steps {
-                echo 'Cloning project...'
-                sh """
-                    rm -rf $PROJECT_DIR
-                    git clone $GIT_REPO $PROJECT_DIR
-                """
-            }
-        }
+# -----------------------
+# Clone or Pull Project
+# -----------------------
+cd /home/vmukti
+if [ -d "$PROJECT_DIR" ]; then
+    echo "Updating existing project..."
+    cd "$PROJECT_DIR"
+    git reset --hard
+    git pull
+else
+    echo "Cloning project..."
+    git clone "$GIT_REPO" "$PROJECT_DIR"
+fi
 
-        stage('Build Frontend') {
-            steps {
-                echo 'Building frontend...'
-                sh """
-                    cd $PROJECT_DIR/arcis_frontend_R-D
-                    npm install
-                    CI=false npm run build
-                    cd ../../
-                """
-            }
-        }
+# -----------------------
+# Build Frontend
+# -----------------------
+echo "Building frontend..."
+cd "$PROJECT_DIR/arcis_frontend_R-D"
+npm install
+CI=false npm run build
 
-        stage('Install Backend') {
-            steps {
-                echo 'Installing backend...'
-                sh """
-                    cd $PROJECT_DIR/arcis_backend_R-D
-                    npm install
-                    cd ../../
-                """
-            }
-        }
+# Prepare frontend folder
+sudo mkdir -p "$FRONTEND_DIR"
+sudo rm -rf "$FRONTEND_DIR/*"
+sudo cp -r build/* "$FRONTEND_DIR"
+sudo chown -R vmukti:vmukti "$FRONTEND_DIR"
 
-        stage('Deploy Frontend') {
-            steps {
-                echo 'Deploying frontend to server...'
-                sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST '
-                        # Ensure folder exists and is writable
-                        sudo mkdir -p $FRONTEND_DIR
-                        sudo chown -R $DEPLOY_USER:$DEPLOY_USER $FRONTEND_DIR
-                        rm -rf $FRONTEND_DIR/*
-                    '
-                    scp -r $PROJECT_DIR/arcis_frontend_R-D/build/* $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_DIR/
-                """
-            }
-        }
+# -----------------------
+# Install Backend
+# -----------------------
+echo "Installing backend..."
+cd "$PROJECT_DIR/arcis_backend_R-D"
+npm install
 
-        stage('Install and Configure Nginx') {
-            steps {
-                echo 'Installing and configuring Nginx...'
-                sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST '
-                        if ! command -v nginx > /dev/null; then
-                            sudo apt update
-                            sudo apt install nginx -y
-                        fi
+# Deploy backend
+sudo mkdir -p "$BACKEND_DIR"
+sudo rm -rf "$BACKEND_DIR/*"
+sudo cp -r * "$BACKEND_DIR"
+sudo chown -R vmukti:vmukti "$BACKEND_DIR"
 
-                        FRONTEND_CONF=/etc/nginx/sites-available/electionarcis
-                        sudo bash -c "cat > \$FRONTEND_CONF" << 'EOL'
+# -----------------------
+# Setup Backend Service
+# -----------------------
+SERVICE_FILE=/etc/systemd/system/electionarcis.service
+if [ ! -f "$SERVICE_FILE" ]; then
+sudo bash -c "cat > $SERVICE_FILE" <<EOL
+[Unit]
+Description=ElectionArcis Backend Service
+After=network.target
+
+[Service]
+User=vmukti
+WorkingDirectory=$BACKEND_DIR
+ExecStart=/usr/bin/env node server.js
+Restart=always
+Environment=NODE_ENV=$NODE_ENV
+Environment=PORT=$PORT
+
+[Install]
+WantedBy=multi-user.target
+EOL
+    sudo systemctl daemon-reload
+    sudo systemctl enable electionarcis
+fi
+
+# Restart backend service
+sudo systemctl restart electionarcis
+sudo systemctl status electionarcis --no-pager
+
+# -----------------------
+# Configure Nginx
+# -----------------------
+FRONTEND_CONF=/etc/nginx/sites-available/electionarcis
+sudo bash -c "cat > $FRONTEND_CONF" <<EOL
 server {
     listen 80;
     server_name _;
@@ -94,70 +107,9 @@ server {
     }
 }
 EOL
-                        sudo ln -sf /etc/nginx/sites-available/electionarcis /etc/nginx/sites-enabled/
-                        sudo nginx -t
-                        sudo systemctl restart nginx
-                    '
-                """
-            }
-        }
 
-        stage('Deploy Backend') {
-            steps {
-                echo 'Deploying backend to server...'
-                sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST '
-                        sudo mkdir -p $BACKEND_DIR
-                        sudo chown -R $DEPLOY_USER:$DEPLOY_USER $BACKEND_DIR
-                        rm -rf $BACKEND_DIR/*
-                    '
-                    scp -r $PROJECT_DIR/arcis_backend_R-D/* $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_DIR/
-                """
-            }
-        }
+sudo ln -sf /etc/nginx/sites-available/electionarcis /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
 
-        stage('Restart Backend Service') {
-            steps {
-                echo 'Restarting backend service'
-                sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST '
-                        SERVICE_FILE=/etc/systemd/system/electionarcis.service
-
-                        if [ ! -f \$SERVICE_FILE ]; then
-                            sudo bash -c "cat > \$SERVICE_FILE" << 'EOL'
-[Unit]
-Description=ElectionArcis Backend Service
-After=network.target
-
-[Service]
-User=$DEPLOY_USER
-WorkingDirectory=$BACKEND_DIR
-ExecStart=/usr/bin/env node server.js
-Restart=always
-Environment=NODE_ENV=$NODE_ENV
-Environment=PORT=$PORT
-
-[Install]
-WantedBy=multi-user.target
-EOL
-                            sudo systemctl daemon-reload
-                            sudo systemctl enable electionarcis
-                        fi
-
-                        sudo systemctl restart electionarcis
-                        sudo systemctl status electionarcis --no-pager
-                    '
-                """
-            }
-        }
-    }
-
-    post {
-        success {
-            echo 'Deployment completed successfully!'
-        }
-        failure {
-            echo 'Deployment failed!'
-        }
-    }
-}
+echo "Deployment completed successfully!"
