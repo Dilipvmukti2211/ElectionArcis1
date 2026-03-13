@@ -50,8 +50,11 @@ pipeline {
             steps {
                 echo 'Deploying frontend to server...'
                 sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST \\
-                    "sudo mkdir -p $FRONTEND_DIR && sudo chown -R $DEPLOY_USER:$DEPLOY_USER $FRONTEND_DIR && rm -rf $FRONTEND_DIR/*"
+                    ssh $DEPLOY_USER@$DEPLOY_HOST '
+                        sudo mkdir -p $FRONTEND_DIR
+                        sudo chown -R $DEPLOY_USER:$DEPLOY_USER $FRONTEND_DIR
+                        rm -rf $FRONTEND_DIR/*
+                    '
                     scp -r $PROJECT_DIR/arcis_frontend_R-D/build/* $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_DIR/
                 """
             }
@@ -61,14 +64,14 @@ pipeline {
             steps {
                 echo 'Installing and configuring Nginx...'
                 sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST \\
-                    'if ! command -v nginx > /dev/null; then
-                        sudo apt update
-                        sudo apt install nginx -y
-                    fi
+                    ssh $DEPLOY_USER@$DEPLOY_HOST '
+                        if ! command -v nginx > /dev/null; then
+                            sudo apt update
+                            sudo apt install nginx -y
+                        fi
 
-                    FRONTEND_CONF=/etc/nginx/sites-available/electionarcis
-                    sudo bash -c "cat > \$FRONTEND_CONF" << EOL
+                        FRONTEND_CONF=/etc/nginx/sites-available/electionarcis
+                        sudo bash -c "cat > \$FRONTEND_CONF" << 'EOL'
 server {
     listen 80;
     server_name _;
@@ -90,9 +93,9 @@ server {
     }
 }
 EOL
-                    sudo ln -sf /etc/nginx/sites-available/electionarcis /etc/nginx/sites-enabled/
-                    sudo nginx -t
-                    sudo systemctl restart nginx
+                        sudo ln -sf /etc/nginx/sites-available/electionarcis /etc/nginx/sites-enabled/
+                        sudo nginx -t
+                        sudo systemctl restart nginx
                     '
                 """
             }
@@ -102,8 +105,11 @@ EOL
             steps {
                 echo 'Deploying backend to server...'
                 sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST \\
-                    "sudo mkdir -p $BACKEND_DIR && sudo chown -R $DEPLOY_USER:$DEPLOY_USER $BACKEND_DIR && rm -rf $BACKEND_DIR/*"
+                    ssh $DEPLOY_USER@$DEPLOY_HOST '
+                        sudo mkdir -p $BACKEND_DIR
+                        sudo chown -R $DEPLOY_USER:$DEPLOY_USER $BACKEND_DIR
+                        rm -rf $BACKEND_DIR/*
+                    '
                     scp -r $PROJECT_DIR/arcis_backend_R-D/* $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_DIR/
                 """
             }
@@ -113,19 +119,19 @@ EOL
             steps {
                 echo 'Restarting backend service'
                 sh """
-                    ssh $DEPLOY_USER@$DEPLOY_HOST \\
-                    'SERVICE_FILE=/etc/systemd/system/electionarcis.service
+                    ssh $DEPLOY_USER@$DEPLOY_HOST '
+                        SERVICE_FILE=/etc/systemd/system/electionarcis.service
 
-                    if [ ! -f \$SERVICE_FILE ]; then
-                        sudo bash -c "cat > \$SERVICE_FILE" << EOL
+                        if [ ! -f \$SERVICE_FILE ]; then
+                            sudo bash -c "cat > \$SERVICE_FILE" << 'EOL'
 [Unit]
 Description=ElectionArcis Backend Service
 After=network.target
 
 [Service]
-User=$DEPLOY_USER
+User=deploy
 WorkingDirectory=$BACKEND_DIR
-ExecStart=$(which node) server.js
+ExecStart=/usr/bin/env node server.js
 Restart=always
 Environment=NODE_ENV=$NODE_ENV
 Environment=PORT=$PORT
@@ -133,12 +139,12 @@ Environment=PORT=$PORT
 [Install]
 WantedBy=multi-user.target
 EOL
-                        sudo systemctl daemon-reload
-                        sudo systemctl enable electionarcis
-                    fi
+                            sudo systemctl daemon-reload
+                            sudo systemctl enable electionarcis
+                        fi
 
-                    sudo systemctl restart electionarcis
-                    sudo systemctl status electionarcis --no-pager
+                        sudo systemctl restart electionarcis
+                        sudo systemctl status electionarcis --no-pager
                     '
                 """
             }
