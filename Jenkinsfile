@@ -4,8 +4,8 @@ pipeline {
     environment {
         DEPLOY_USER = 'deploy'
         DEPLOY_HOST = 'fail.vmukti.com'
-        FRONTEND_DIR = '/home/vmukti/frontend '
-        BACKEND_DIR = '/home/vmukti/backend'
+        FRONTEND_DIR = '/home/vmukti/electionfrontend'
+        BACKEND_DIR = '/home/vmukti/electionbackend'
         GIT_REPO = 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
         PROJECT_DIR = 'ElectionArcis'
         NODE_ENV = 'production'
@@ -68,7 +68,7 @@ pipeline {
                     fi
 
                     FRONTEND_CONF=/etc/nginx/sites-available/electionarcis
-                    sudo bash -c "cat > \$FRONTEND_CONF" << EOL
+                    sudo bash -c "cat > \$FRONTEND_CONF" << 'EOL'
 server {
     listen 80;
     server_name _;
@@ -110,13 +110,13 @@ EOL
 
         stage('Restart Backend Service') {
             steps {
-                echo 'Restarting backend service...'
+                echo 'Restarting backend service'
                 sh """
                     ssh $DEPLOY_USER@$DEPLOY_HOST \\
                     'SERVICE_FILE=/etc/systemd/system/electionarcis.service
 
                     if [ ! -f \$SERVICE_FILE ]; then
-                        sudo bash -c "cat > \$SERVICE_FILE" << EOL
+                        sudo bash -c "cat > \$SERVICE_FILE" << 'EOL'
 [Unit]
 Description=ElectionArcis Backend Service
 After=network.target
@@ -124,7 +124,7 @@ After=network.target
 [Service]
 User=deploy
 WorkingDirectory=$BACKEND_DIR
-ExecStart=$(which node) server.js
+ExecStart=\$(which node) server.js
 Restart=always
 Environment=NODE_ENV=$NODE_ENV
 Environment=PORT=$PORT
