@@ -3,7 +3,6 @@
 # dependencies
 /android
 /node_modules
-/.env
 /.pnp
 .pnp.js
 capacitor.config.ts
