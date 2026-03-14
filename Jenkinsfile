@@ -45,7 +45,7 @@ pipeline {
 
         stage('Install Backend Dependencies') {
             steps {
-                echo 'Installing backend...'
+                echo 'Installing backend dependencies...'
                 sh '''
                     cd arcis_backend_R-D
                     npm install
@@ -58,17 +58,15 @@ pipeline {
                 echo 'Deploying frontend to server...'
                 withCredentials([sshUserPrivateKey(
                     credentialsId: 'deploy-ssh-key',
-                    keyFileVariable: 'SSH_KEY',
-                    usernameVariable: 'SSH_USER'
+                    keyFileVariable: 'SSH_KEY'
                 )]) {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" \
-                            ${DEPLOY_USER}@${DEPLOY_HOST} \
-                            "sudo mkdir -p ${FRONTEND_DIR} && sudo rm -rf ${FRONTEND_DIR}/*"
+                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" ${DEPLOY_USER}@${DEPLOY_HOST} \
+                        "sudo mkdir -p ${FRONTEND_DIR} && sudo rm -rf ${FRONTEND_DIR}/*"
 
                         scp -o StrictHostKeyChecking=no -i "$SSH_KEY" -r \
-                            arcis_frontend_R-D/build/* \
-                            ${DEPLOY_USER}@${DEPLOY_HOST}:${FRONTEND_DIR}/
+                        arcis_frontend_R-D/build/* \
+                        ${DEPLOY_USER}@${DEPLOY_HOST}:${FRONTEND_DIR}/
                     '''
                 }
             }
@@ -82,8 +80,7 @@ pipeline {
                     keyFileVariable: 'SSH_KEY'
                 )]) {
                     sh """
-                        ssh -o StrictHostKeyChecking=no -i "\$SSH_KEY" \
-                            ${DEPLOY_USER}@${DEPLOY_HOST} bash -s << 'ENDSSH'
+ssh -o StrictHostKeyChecking=no -i "\$SSH_KEY" ${DEPLOY_USER}@${DEPLOY_HOST} bash -s << 'ENDSSH'
 
 if ! command -v nginx > /dev/null; then
     sudo apt-get update -y
@@ -119,7 +116,7 @@ sudo nginx -t
 sudo systemctl restart nginx
 
 ENDSSH
-                    """
+"""
                 }
             }
         }
@@ -132,13 +129,12 @@ ENDSSH
                     keyFileVariable: 'SSH_KEY'
                 )]) {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" \
-                            ${DEPLOY_USER}@${DEPLOY_HOST} \
-                            "sudo mkdir -p ${BACKEND_DIR} && sudo rm -rf ${BACKEND_DIR}/*"
+                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" ${DEPLOY_USER}@${DEPLOY_HOST} \
+                        "sudo mkdir -p ${BACKEND_DIR} && sudo rm -rf ${BACKEND_DIR}/*"
 
                         scp -o StrictHostKeyChecking=no -i "$SSH_KEY" -r \
-                            arcis_backend_R-D/* \
-                            ${DEPLOY_USER}@${DEPLOY_HOST}:${BACKEND_DIR}/
+                        arcis_backend_R-D/* \
+                        ${DEPLOY_USER}@${DEPLOY_HOST}:${BACKEND_DIR}/
                     '''
                 }
             }
@@ -152,13 +148,12 @@ ENDSSH
                     keyFileVariable: 'SSH_KEY'
                 )]) {
                     sh """
-                        ssh -o StrictHostKeyChecking=no -i "\$SSH_KEY" \
-                            ${DEPLOY_USER}@${DEPLOY_HOST} bash -s << 'ENDSSH'
+ssh -o StrictHostKeyChecking=no -i "\$SSH_KEY" ${DEPLOY_USER}@${DEPLOY_HOST} bash -s << 'ENDSSH'
 
 SERVICE_FILE=/etc/systemd/system/electionarcis.service
 
 if [ ! -f \$SERVICE_FILE ]; then
-    sudo tee \$SERVICE_FILE > /dev/null << 'SERVICECONF'
+sudo tee \$SERVICE_FILE > /dev/null << 'SERVICECONF'
 [Unit]
 Description=ElectionArcis Backend Service
 After=network.target
@@ -166,7 +161,7 @@ After=network.target
 [Service]
 User=deploy
 WorkingDirectory=/var/www/electionarcis
-ExecStart=/usr/bin/node server.js
+ExecStart=/usr/bin/node /var/www/electionarcis/server.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
@@ -176,8 +171,8 @@ Environment=PORT=3000
 WantedBy=multi-user.target
 SERVICECONF
 
-    sudo systemctl daemon-reload
-    sudo systemctl enable electionarcis
+sudo systemctl daemon-reload
+sudo systemctl enable electionarcis
 fi
 
 sudo systemctl restart electionarcis
@@ -185,7 +180,7 @@ sleep 3
 sudo systemctl status electionarcis --no-pager
 
 ENDSSH
-                    """
+"""
                 }
             }
         }
@@ -193,21 +188,10 @@ ENDSSH
 
     post {
         success {
-            echo '✅ Deployment completed successfully!'
+            echo 'Deployment completed successfully!'
         }
         failure {
-            echo '❌ Deployment FAILED. Check logs above.'
+            echo 'Deployment FAILED. Check logs above.'
         }
     }
 }
-```
-
----
-
-## Setup Checklist
-
-### 1. Branch Name Confirm Karo
-GitHub repo mein jaake dekho branch ka naam `main` hai ya `master`:
-```
-branches: [[name: '*/main']]   // agar main hai
-branches: [[name: '*/master']] // agar master hai
