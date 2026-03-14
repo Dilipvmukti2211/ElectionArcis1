@@ -4,8 +4,8 @@ pipeline {
     environment {
         DEPLOY_USER = "deploy"
         DEPLOY_HOST = "fail.vmukti.com"
-        FRONTEND_DIR = "/var/www/html"
-        BACKEND_DIR = "/var/www/electionarcis"
+        FRONTEND_DIR = "/var/www/electionarcis/frontend"
+        BACKEND_DIR = "/var/www/electionarcis/backend"
     }
 
     stages {
@@ -17,54 +17,40 @@ pipeline {
             }
         }
 
-        stage('Create Frontend ENV') {
-            steps {
-                echo "Creating frontend .env file..."
-                sh '''
-                cat > arcis_frontend_R-D/.env <<EOF
-REACT_APP_URL=http://localhost:8081
-REACT_APP_BASE_URL=http://localhost:8081
-REACT_APP_GOOGLE_MAPS_KEY=AIzaSyD2CF3PlGBd0tQhusHwX3ngfPaad0pmJ_Q
-REACT_APP_ENCRYPT_KEY=
-REACT_APP_IV=
-REACT_APP_DECRYPT_KEY=
-REACT_APP_D_IV=
-EOF
-                '''
-            }
-        }
-
-        stage('Build Frontend') {
-            steps {
-                echo "Building frontend..."
-                sh '''
-                cd arcis_frontend_R-D
-                npm install
-                CI=false npm run build
-                '''
-            }
-        }
-
-        stage('Install Backend Dependencies') {
-            steps {
-                echo "Installing backend dependencies..."
-                sh '''
-                cd arcis_backend_R-D
-                npm install
-                '''
-            }
-        }
-
         stage('Test SSH Connection') {
             steps {
-                echo "Testing SSH connection..."
+
                 withCredentials([sshUserPrivateKey(
                     credentialsId: 'deploy-ssh-key',
                     keyFileVariable: 'SSH_KEY'
                 )]) {
+
                     sh '''
                     chmod 600 $SSH_KEY
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "echo SSH SUCCESS && hostname && whoami"
+                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "echo SSH CONNECTED"
+                    '''
+                }
+            }
+        }
+
+        stage('Install PM2 (if not installed)') {
+            steps {
+
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
+
+                    sh '''
+                    ssh -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "
+                        if ! command -v pm2 &> /dev/null
+                        then
+                            echo 'Installing PM2...'
+                            sudo npm install -g pm2
+                        else
+                            echo 'PM2 already installed'
+                        fi
+                    "
                     '''
                 }
             }
@@ -72,20 +58,25 @@ EOF
 
         stage('Deploy Frontend') {
             steps {
-                echo "Deploying frontend..."
+
                 withCredentials([sshUserPrivateKey(
                     credentialsId: 'deploy-ssh-key',
                     keyFileVariable: 'SSH_KEY'
                 )]) {
+
                     sh '''
                     chmod 600 $SSH_KEY
 
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "
-                    sudo mkdir -p ${FRONTEND_DIR}
-                    sudo rm -rf ${FRONTEND_DIR}/*
-                    "
+                    ssh -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "mkdir -p ${FRONTEND_DIR}"
 
-                    scp -o StrictHostKeyChecking=no -i $SSH_KEY -r arcis_frontend_R-D/build/* ${DEPLOY_USER}@${DEPLOY_HOST}:${FRONTEND_DIR}/
+                    scp -i $SSH_KEY -r arcis_frontend_R-D/* \
+                    ${DEPLOY_USER}@${DEPLOY_HOST}:${FRONTEND_DIR}
+
+                    ssh -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "
+                        cd ${FRONTEND_DIR}
+                        npm install
+                        pm2 restart frontend || pm2 start npm --name frontend -- start
+                    "
                     '''
                 }
             }
@@ -93,43 +84,30 @@ EOF
 
         stage('Deploy Backend') {
             steps {
-                echo "Deploying backend..."
+
                 withCredentials([sshUserPrivateKey(
                     credentialsId: 'deploy-ssh-key',
                     keyFileVariable: 'SSH_KEY'
                 )]) {
+
                     sh '''
                     chmod 600 $SSH_KEY
 
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "
-                    sudo mkdir -p ${BACKEND_DIR}
-                    sudo rm -rf ${BACKEND_DIR}/*
-                    "
+                    ssh -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "mkdir -p ${BACKEND_DIR}"
 
-                    scp -o StrictHostKeyChecking=no -i $SSH_KEY -r arcis_backend_R-D/* ${DEPLOY_USER}@${DEPLOY_HOST}:${BACKEND_DIR}/
-                    '''
-                }
-            }
-        }
+                    scp -i $SSH_KEY -r arcis_backend_R-D/* \
+                    ${DEPLOY_USER}@${DEPLOY_HOST}:${BACKEND_DIR}
 
-        stage('Restart Backend Service') {
-            steps {
-                echo "Restarting backend service..."
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'deploy-ssh-key',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    sh '''
-                    chmod 600 $SSH_KEY
-
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "
-                    sudo systemctl restart electionarcis
-                    sudo systemctl status electionarcis --no-pager
+                    ssh -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "
+                        cd ${BACKEND_DIR}
+                        npm install
+                        pm2 restart backend || pm2 start server.js --name backend
                     "
                     '''
                 }
             }
         }
+
     }
 
     post {
