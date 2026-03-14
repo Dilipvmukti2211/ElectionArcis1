@@ -3,27 +3,27 @@ agent any
 
 ```
 environment {
-    DEPLOY_USER = 'deploy'
-    DEPLOY_HOST = 'fail.vmukti.com'
-    FRONTEND_DIR = '/var/www/html'
-    BACKEND_DIR = '/var/www/electionarcis'
-    NODE_ENV = 'production'
-    PORT = '3000'
-    SSH_KEY = '/var/lib/jenkins/.ssh/jenkins_deploy'
+    DEPLOY_USER  = "deploy"
+    DEPLOY_HOST  = "fail.vmukti.com"
+    FRONTEND_DIR = "/var/www/html"
+    BACKEND_DIR  = "/var/www/electionarcis"
+    SSH_KEY      = "/var/lib/jenkins/.ssh/jenkins_deploy"
+    NODE_ENV     = "production"
+    PORT         = "3000"
 }
 
 stages {
 
-    stage('Clone Project') {
+    stage('Checkout Code') {
         steps {
-            echo 'Cloning project...'
+            echo "Cloning repository..."
             git branch: 'main', url: 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
         }
     }
 
     stage('Build Frontend') {
         steps {
-            echo 'Building frontend...'
+            echo "Building React frontend..."
             sh '''
                 cd arcis_frontend_R-D
                 npm install
@@ -34,7 +34,7 @@ stages {
 
     stage('Install Backend Dependencies') {
         steps {
-            echo 'Installing backend dependencies...'
+            echo "Installing backend packages..."
             sh '''
                 cd arcis_backend_R-D
                 npm install
@@ -44,7 +44,7 @@ stages {
 
     stage('Deploy Frontend') {
         steps {
-            echo 'Deploying frontend...'
+            echo "Deploying frontend build..."
             sh '''
                 ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST \
                 "sudo mkdir -p $FRONTEND_DIR && sudo rm -rf $FRONTEND_DIR/*"
@@ -58,13 +58,13 @@ stages {
 
     stage('Configure Nginx') {
         steps {
-            echo 'Configuring Nginx...'
+            echo "Configuring Nginx..."
             sh '''
 ```
 
 ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST << 'ENDSSH'
 
-if ! command -v nginx >/dev/null; then
+if ! command -v nginx > /dev/null; then
 sudo apt update -y
 sudo apt install nginx -y
 fi
@@ -107,7 +107,7 @@ ENDSSH
 ```
     stage('Deploy Backend') {
         steps {
-            echo 'Deploying backend...'
+            echo "Deploying backend files..."
             sh '''
                 ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST \
                 "sudo mkdir -p $BACKEND_DIR && sudo rm -rf $BACKEND_DIR/*"
@@ -121,7 +121,7 @@ ENDSSH
 
     stage('Restart Backend Service') {
         steps {
-            echo 'Restarting backend service...'
+            echo "Restarting Node backend service..."
             sh '''
 ```
 
@@ -158,16 +158,15 @@ ENDSSH
 '''
 }
 }
-
-```
 }
 
+```
 post {
     success {
-        echo 'Deployment completed successfully'
+        echo "Deployment completed successfully"
     }
     failure {
-        echo 'Deployment FAILED. Check logs above.'
+        echo "Deployment FAILED. Check Jenkins logs."
     }
 }
 ```
