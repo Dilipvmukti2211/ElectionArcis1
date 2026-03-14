@@ -13,20 +13,10 @@ pipeline {
                 )]) {
 
                     sh '''
-                        echo "Connecting to server..."
-                        ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@fail.vmukti.com "echo SSH SUCCESS && hostname && whoami"
+                        ssh -o StrictHostKeyChecking=no -i $SSH_KEY $SSH_USER@fail.vmukti.com "echo SSH SUCCESS"
                     '''
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo 'SSH connection successful'
-        }
-        failure {
-            echo 'SSH connection failed'
         }
     }
 }
