@@ -42,9 +42,14 @@ pipeline {
             steps {
                 echo "Testing SSH connection..."
 
-                sshagent(['deploy-ssh-key']) {
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
+
                     sh '''
-                    ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "echo SSH SUCCESS && hostname && whoami"
+                    chmod 600 $SSH_KEY
+                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "echo SSH SUCCESS && hostname && whoami"
                     '''
                 }
             }
@@ -54,11 +59,20 @@ pipeline {
             steps {
                 echo "Deploying frontend..."
 
-                sshagent(['deploy-ssh-key']) {
-                    sh '''
-                    ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "sudo mkdir -p $FRONTEND_DIR && sudo rm -rf $FRONTEND_DIR/*"
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
 
-                    scp -o StrictHostKeyChecking=no -r arcis_frontend_R-D/build/* $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_DIR/
+                    sh '''
+                    chmod 600 $SSH_KEY
+
+                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} \
+                    "sudo mkdir -p ${FRONTEND_DIR} && sudo rm -rf ${FRONTEND_DIR}/*"
+
+                    scp -o StrictHostKeyChecking=no -i $SSH_KEY -r \
+                    arcis_frontend_R-D/build/* \
+                    ${DEPLOY_USER}@${DEPLOY_HOST}:${FRONTEND_DIR}/
                     '''
                 }
             }
@@ -68,11 +82,20 @@ pipeline {
             steps {
                 echo "Deploying backend..."
 
-                sshagent(['deploy-ssh-key']) {
-                    sh '''
-                    ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "sudo mkdir -p $BACKEND_DIR && sudo rm -rf $BACKEND_DIR/*"
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
 
-                    scp -o StrictHostKeyChecking=no -r arcis_backend_R-D/* $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_DIR/
+                    sh '''
+                    chmod 600 $SSH_KEY
+
+                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} \
+                    "sudo mkdir -p ${BACKEND_DIR} && sudo rm -rf ${BACKEND_DIR}/*"
+
+                    scp -o StrictHostKeyChecking=no -i $SSH_KEY -r \
+                    arcis_backend_R-D/* \
+                    ${DEPLOY_USER}@${DEPLOY_HOST}:${BACKEND_DIR}/
                     '''
                 }
             }
@@ -82,24 +105,20 @@ pipeline {
             steps {
                 echo "Restarting backend service..."
 
-                sshagent(['deploy-ssh-key']) {
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
+
                     sh '''
-                    ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "
+                    chmod 600 $SSH_KEY
 
-                    if ! command -v node > /dev/null; then
-                        sudo apt update
-                        sudo apt install -y nodejs npm
-                    fi
+                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} << 'EOF'
 
-                    if ! command -v pm2 > /dev/null; then
-                        sudo npm install -g pm2
-                    fi
+                    sudo systemctl restart electionarcis
+                    sudo systemctl status electionarcis --no-pager
 
-                    cd $BACKEND_DIR
-                    pm2 delete electionarcis || true
-                    pm2 start server.js --name electionarcis
-                    pm2 save
-                    "
+                    EOF
                     '''
                 }
             }
@@ -109,9 +128,8 @@ pipeline {
 
     post {
         success {
-            echo "Deployment completed successfully"
+            echo "Deployment SUCCESS"
         }
-
         failure {
             echo "Deployment FAILED"
         }
