@@ -3,13 +3,15 @@ agent any
 
 ```
 environment {
-    DEPLOY_USER  = "deploy"
-    DEPLOY_HOST  = "fail.vmukti.com"
+    DEPLOY_USER = "deploy"
+    DEPLOY_HOST = "fail.vmukti.com"
+    SSH_KEY = "/var/lib/jenkins/.ssh/jenkins_deploy"
+
     FRONTEND_DIR = "/var/www/html"
-    BACKEND_DIR  = "/var/www/electionarcis"
-    SSH_KEY      = "/var/lib/jenkins/.ssh/jenkins_deploy"
-    NODE_ENV     = "production"
-    PORT         = "3000"
+    BACKEND_DIR = "/var/www/electionarcis"
+
+    NODE_ENV = "production"
+    PORT = "3000"
 }
 
 stages {
@@ -17,7 +19,8 @@ stages {
     stage('Checkout Code') {
         steps {
             echo "Cloning repository..."
-            git branch: 'main', url: 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
+            git branch: 'main',
+                url: 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
         }
     }
 
@@ -34,7 +37,7 @@ stages {
 
     stage('Install Backend Dependencies') {
         steps {
-            echo "Installing backend packages..."
+            echo "Installing backend dependencies..."
             sh '''
                 cd arcis_backend_R-D
                 npm install
@@ -86,7 +89,7 @@ location /api/ {
     proxy_pass http://127.0.0.1:3000/;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
+    proxy_set_header Connection "upgrade";
     proxy_set_header Host $host;
 }
 ```
@@ -96,6 +99,7 @@ NGINXCONF
 
 sudo ln -sf /etc/nginx/sites-available/electionarcis /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
+
 sudo nginx -t
 sudo systemctl restart nginx
 
@@ -107,7 +111,7 @@ ENDSSH
 ```
     stage('Deploy Backend') {
         steps {
-            echo "Deploying backend files..."
+            echo "Deploying backend..."
             sh '''
                 ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST \
                 "sudo mkdir -p $BACKEND_DIR && sudo rm -rf $BACKEND_DIR/*"
@@ -121,7 +125,7 @@ ENDSSH
 
     stage('Restart Backend Service') {
         steps {
-            echo "Restarting Node backend service..."
+            echo "Restarting backend service..."
             sh '''
 ```
 
@@ -130,6 +134,7 @@ ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST << 'ENDSSH
 SERVICE_FILE=/etc/systemd/system/electionarcis.service
 
 if [ ! -f $SERVICE_FILE ]; then
+
 sudo tee $SERVICE_FILE > /dev/null << 'SERVICECONF'
 [Unit]
 Description=ElectionArcis Backend
@@ -140,6 +145,7 @@ User=deploy
 WorkingDirectory=/var/www/electionarcis
 ExecStart=/usr/bin/node /var/www/electionarcis/server.js
 Restart=always
+RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=3000
 
@@ -149,6 +155,7 @@ SERVICECONF
 
 sudo systemctl daemon-reload
 sudo systemctl enable electionarcis
+
 fi
 
 sudo systemctl restart electionarcis
@@ -163,10 +170,10 @@ ENDSSH
 ```
 post {
     success {
-        echo "Deployment completed successfully"
+        echo "Deployment completed successfully!"
     }
     failure {
-        echo "Deployment FAILED. Check Jenkins logs."
+        echo "Deployment FAILED. Check logs above."
     }
 }
 ```
