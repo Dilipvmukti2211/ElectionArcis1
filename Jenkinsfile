@@ -1,137 +1,133 @@
 pipeline {
-    agent any
+agent any
 
-    environment {
-        DEPLOY_USER = "deploy"
-        DEPLOY_HOST = "fail.vmukti.com"
-        FRONTEND_DIR = "/var/www/html"
-        BACKEND_DIR = "/var/www/electionarcis"
+```
+environment {
+    DEPLOY_USER = "deploy"
+    DEPLOY_HOST = "fail.vmukti.com"
+    FRONTEND_DIR = "/var/www/html"
+    BACKEND_DIR = "/var/www/electionarcis"
+}
+
+stages {
+
+    stage('Clone Project') {
+        steps {
+            echo "Cloning repository..."
+            git branch: 'main', url: 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
+        }
     }
 
-    stages {
-
-        stage('Clone Project') {
-            steps {
-                echo "Cloning repository..."
-                git branch: 'main', url: 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
-            }
+    stage('Build Frontend') {
+        steps {
+            echo "Building frontend..."
+            sh '''
+            cd arcis_frontend_R-D
+            npm install
+            CI=false npm run build
+            '''
         }
+    }
 
-        stage('Build Frontend') {
-            steps {
-                echo "Building frontend..."
+    stage('Install Backend Dependencies') {
+        steps {
+            echo "Installing backend dependencies..."
+            sh '''
+            cd arcis_backend_R-D
+            npm install
+            '''
+        }
+    }
+
+    stage('Test SSH Connection') {
+        steps {
+            echo "Testing SSH connection..."
+
+            withCredentials([sshUserPrivateKey(
+                credentialsId: 'deploy-ssh-key',
+                keyFileVariable: 'SSH_KEY'
+            )]) {
+
                 sh '''
-                cd arcis_frontend_R-D
-                npm install
-                CI=false npm run build
+                chmod 600 $SSH_KEY
+                ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "echo SSH SUCCESS && hostname && whoami"
                 '''
             }
         }
+    }
 
-        stage('Install Backend Dependencies') {
-            steps {
-                echo "Installing backend dependencies..."
+    stage('Deploy Frontend') {
+        steps {
+            echo "Deploying frontend..."
+
+            withCredentials([sshUserPrivateKey(
+                credentialsId: 'deploy-ssh-key',
+                keyFileVariable: 'SSH_KEY'
+            )]) {
+
                 sh '''
-                cd arcis_backend_R-D
-                npm install
+                chmod 600 $SSH_KEY
+
+                ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "sudo mkdir -p ${FRONTEND_DIR} && sudo rm -rf ${FRONTEND_DIR}/*"
+
+                scp -o StrictHostKeyChecking=no -i $SSH_KEY -r arcis_frontend_R-D/build/* ${DEPLOY_USER}@${DEPLOY_HOST}:${FRONTEND_DIR}/
                 '''
             }
         }
-
-        stage('Test SSH Connection') {
-            steps {
-                echo "Testing SSH connection..."
-
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'deploy-ssh-key',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-
-                    sh '''
-                    chmod 600 $SSH_KEY
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "echo SSH SUCCESS && hostname && whoami"
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy Frontend') {
-            steps {
-                echo "Deploying frontend..."
-
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'deploy-ssh-key',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-
-                    sh '''
-                    chmod 600 $SSH_KEY
-
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} \
-                    "sudo mkdir -p ${FRONTEND_DIR} && sudo rm -rf ${FRONTEND_DIR}/*"
-
-                    scp -o StrictHostKeyChecking=no -i $SSH_KEY -r \
-                    arcis_frontend_R-D/build/* \
-                    ${DEPLOY_USER}@${DEPLOY_HOST}:${FRONTEND_DIR}/
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy Backend') {
-            steps {
-                echo "Deploying backend..."
-
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'deploy-ssh-key',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-
-                    sh '''
-                    chmod 600 $SSH_KEY
-
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} \
-                    "sudo mkdir -p ${BACKEND_DIR} && sudo rm -rf ${BACKEND_DIR}/*"
-
-                    scp -o StrictHostKeyChecking=no -i $SSH_KEY -r \
-                    arcis_backend_R-D/* \
-                    ${DEPLOY_USER}@${DEPLOY_HOST}:${BACKEND_DIR}/
-                    '''
-                }
-            }
-        }
-
-        stage('Restart Backend Service') {
-            steps {
-                echo "Restarting backend service..."
-
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'deploy-ssh-key',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-
-                    sh '''
-                    chmod 600 $SSH_KEY
-
-                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} << 'EOF'
-
-                    sudo systemctl restart electionarcis
-                    sudo systemctl status electionarcis --no-pager
-
-                    EOF
-                    '''
-                }
-            }
-        }
-
     }
 
-    post {
-        success {
-            echo "Deployment SUCCESS"
-        }
-        failure {
-            echo "Deployment FAILED"
+    stage('Deploy Backend') {
+        steps {
+            echo "Deploying backend..."
+
+            withCredentials([sshUserPrivateKey(
+                credentialsId: 'deploy-ssh-key',
+                keyFileVariable: 'SSH_KEY'
+            )]) {
+
+                sh '''
+                chmod 600 $SSH_KEY
+
+                ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "sudo mkdir -p ${BACKEND_DIR} && sudo rm -rf ${BACKEND_DIR}/*"
+
+                scp -o StrictHostKeyChecking=no -i $SSH_KEY -r arcis_backend_R-D/* ${DEPLOY_USER}@${DEPLOY_HOST}:${BACKEND_DIR}/
+                '''
+            }
         }
     }
+
+    stage('Restart Backend Service') {
+        steps {
+            echo "Restarting backend service..."
+
+            withCredentials([sshUserPrivateKey(
+                credentialsId: 'deploy-ssh-key',
+                keyFileVariable: 'SSH_KEY'
+            )]) {
+
+                sh '''
+                chmod 600 $SSH_KEY
+
+                ssh -o StrictHostKeyChecking=no -i $SSH_KEY ${DEPLOY_USER}@${DEPLOY_HOST} "
+                sudo systemctl daemon-reload &&
+                sudo systemctl restart electionarcis &&
+                sudo systemctl status electionarcis --no-pager
+                "
+                '''
+            }
+        }
+    }
+
+}
+
+post {
+    success {
+        echo "Deployment SUCCESS"
+    }
+    failure {
+        echo "Deployment FAILED"
+    }
+}
+```
+
 }
