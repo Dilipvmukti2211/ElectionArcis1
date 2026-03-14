@@ -200,3 +200,14 @@ ENDSSH
         }
     }
 }
+```
+
+---
+
+## Setup Checklist
+
+### 1. Branch Name Confirm Karo
+GitHub repo mein jaake dekho branch ka naam `main` hai ya `master`:
+```
+branches: [[name: '*/main']]   // agar main hai
+branches: [[name: '*/master']] // agar master hai
