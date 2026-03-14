@@ -1,99 +1,107 @@
+
+Jenkins **cannot parse ```** because it expects **pure Groovy pipeline syntax**.
+
+So the fix is simple:
+
+👉 **Remove ALL ``` from the Jenkinsfile.**
+
+---
+
+# Correct Jenkinsfile (copy EXACTLY)
+
+Paste this **directly into your Jenkinsfile in GitHub**.
+
+:::writing{variant="standard" id="11854"}
 pipeline {
-agent any
+    agent any
 
-```
-environment {
-    DEPLOY_USER = "deploy"
-    DEPLOY_HOST = "fail.vmukti.com"
-    SSH_KEY = "/var/lib/jenkins/.ssh/jenkins_deploy"
+    environment {
+        DEPLOY_USER = "deploy"
+        DEPLOY_HOST = "fail.vmukti.com"
+        SSH_KEY = "/var/lib/jenkins/.ssh/jenkins_deploy"
 
-    FRONTEND_DIR = "/var/www/html"
-    BACKEND_DIR = "/var/www/electionarcis"
+        FRONTEND_DIR = "/var/www/html"
+        BACKEND_DIR = "/var/www/electionarcis"
 
-    NODE_ENV = "production"
-    PORT = "3000"
-}
-
-stages {
-
-    stage('Checkout Code') {
-        steps {
-            echo "Cloning repository..."
-            git branch: 'main',
-                url: 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
-        }
+        NODE_ENV = "production"
+        PORT = "3000"
     }
 
-    stage('Build Frontend') {
-        steps {
-            echo "Building React frontend..."
-            sh '''
-                cd arcis_frontend_R-D
-                npm install
-                CI=false npm run build
-            '''
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                echo "Cloning repository..."
+                git branch: 'main',
+                    url: 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
+            }
         }
-    }
 
-    stage('Install Backend Dependencies') {
-        steps {
-            echo "Installing backend dependencies..."
-            sh '''
-                cd arcis_backend_R-D
-                npm install
-            '''
+        stage('Build Frontend') {
+            steps {
+                echo "Building React frontend..."
+                sh '''
+                    cd arcis_frontend_R-D
+                    npm install
+                    CI=false npm run build
+                '''
+            }
         }
-    }
 
-    stage('Deploy Frontend') {
-        steps {
-            echo "Deploying frontend build..."
-            sh '''
-                ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST \
-                "sudo mkdir -p $FRONTEND_DIR && sudo rm -rf $FRONTEND_DIR/*"
-
-                scp -o StrictHostKeyChecking=no -i $SSH_KEY -r \
-                arcis_frontend_R-D/build/* \
-                $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_DIR/
-            '''
+        stage('Install Backend Dependencies') {
+            steps {
+                echo "Installing backend dependencies..."
+                sh '''
+                    cd arcis_backend_R-D
+                    npm install
+                '''
+            }
         }
-    }
 
-    stage('Configure Nginx') {
-        steps {
-            echo "Configuring Nginx..."
-            sh '''
-```
+        stage('Deploy Frontend') {
+            steps {
+                echo "Deploying frontend..."
+                sh '''
+                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST \
+                    "sudo mkdir -p $FRONTEND_DIR && sudo rm -rf $FRONTEND_DIR/*"
 
+                    scp -o StrictHostKeyChecking=no -i $SSH_KEY -r \
+                    arcis_frontend_R-D/build/* \
+                    $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_DIR/
+                '''
+            }
+        }
+
+        stage('Configure Nginx') {
+            steps {
+                echo "Configuring Nginx..."
+                sh '''
 ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST << 'ENDSSH'
 
 if ! command -v nginx > /dev/null; then
-sudo apt update -y
-sudo apt install nginx -y
+    sudo apt update -y
+    sudo apt install nginx -y
 fi
 
 sudo tee /etc/nginx/sites-available/electionarcis > /dev/null << 'NGINXCONF'
 server {
-listen 80;
-server_name _;
+    listen 80;
+    server_name _;
 
-```
-root /var/www/html;
-index index.html;
+    root /var/www/html;
+    index index.html;
 
-location / {
-    try_files $uri /index.html;
-}
+    location / {
+        try_files $uri /index.html;
+    }
 
-location /api/ {
-    proxy_pass http://127.0.0.1:3000/;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-}
-```
-
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
 }
 NGINXCONF
 
@@ -104,31 +112,28 @@ sudo nginx -t
 sudo systemctl restart nginx
 
 ENDSSH
-'''
-}
-}
-
-```
-    stage('Deploy Backend') {
-        steps {
-            echo "Deploying backend..."
-            sh '''
-                ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST \
-                "sudo mkdir -p $BACKEND_DIR && sudo rm -rf $BACKEND_DIR/*"
-
-                scp -o StrictHostKeyChecking=no -i $SSH_KEY -r \
-                arcis_backend_R-D/* \
-                $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_DIR/
-            '''
+                '''
+            }
         }
-    }
 
-    stage('Restart Backend Service') {
-        steps {
-            echo "Restarting backend service..."
-            sh '''
-```
+        stage('Deploy Backend') {
+            steps {
+                echo "Deploying backend..."
+                sh '''
+                    ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST \
+                    "sudo mkdir -p $BACKEND_DIR && sudo rm -rf $BACKEND_DIR/*"
 
+                    scp -o StrictHostKeyChecking=no -i $SSH_KEY -r \
+                    arcis_backend_R-D/* \
+                    $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_DIR/
+                '''
+            }
+        }
+
+        stage('Restart Backend Service') {
+            steps {
+                echo "Restarting backend service..."
+                sh '''
 ssh -o StrictHostKeyChecking=no -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST << 'ENDSSH'
 
 SERVICE_FILE=/etc/systemd/system/electionarcis.service
@@ -162,20 +167,24 @@ sudo systemctl restart electionarcis
 sudo systemctl status electionarcis --no-pager
 
 ENDSSH
-'''
-}
-}
-}
-
-```
-post {
-    success {
-        echo "Deployment completed successfully!"
+                '''
+            }
+        }
     }
-    failure {
-        echo "Deployment FAILED. Check logs above."
+
+    post {
+        success {
+            echo "Deployment completed successfully!"
+        }
+        failure {
+            echo "Deployment FAILED. Check logs above."
+        }
     }
 }
-```
+:::
 
-}
+---
+
+# Important
+
+Your Jenkinsfile must start **directly with**
