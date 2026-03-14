@@ -6,8 +6,6 @@ pipeline {
         DEPLOY_HOST = 'fail.vmukti.com'
         FRONTEND_DIR = '/var/www/html'
         BACKEND_DIR = '/var/www/electionarcis'
-        GIT_REPO = 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
-        PROJECT_DIR = 'ElectionArcis'
         NODE_ENV = 'production'
         PORT = '3000'
     }
@@ -17,10 +15,20 @@ pipeline {
         stage('Clone Project') {
             steps {
                 echo 'Cloning project...'
-                sh '''
-                    rm -rf $PROJECT_DIR
-                    git clone $GIT_REPO $PROJECT_DIR
-                '''
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/Dilipvmukti2211/ElectionArcis1.git'
+                    ]],
+                    extensions: [
+                        [$class: 'CloneOption',
+                            depth: 1,
+                            shallow: true,
+                            timeout: 120
+                        ]
+                    ]
+                ])
             }
         }
 
@@ -28,7 +36,7 @@ pipeline {
             steps {
                 echo 'Building frontend...'
                 sh '''
-                    cd $PROJECT_DIR/arcis_frontend_R-D
+                    cd arcis_frontend_R-D
                     npm install
                     CI=false npm run build
                 '''
@@ -39,7 +47,7 @@ pipeline {
             steps {
                 echo 'Installing backend...'
                 sh '''
-                    cd $PROJECT_DIR/arcis_backend_R-D
+                    cd arcis_backend_R-D
                     npm install
                 '''
             }
@@ -48,15 +56,19 @@ pipeline {
         stage('Deploy Frontend') {
             steps {
                 echo 'Deploying frontend to server...'
-                sshagent(credentials: ['deploy-ssh-key']) {
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_USER'
+                )]) {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "
-                            sudo mkdir -p $FRONTEND_DIR
-                            sudo rm -rf $FRONTEND_DIR/*
-                        "
-                        scp -o StrictHostKeyChecking=no -r \
-                            $PROJECT_DIR/arcis_frontend_R-D/build/* \
-                            $DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_DIR/
+                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" \
+                            ${DEPLOY_USER}@${DEPLOY_HOST} \
+                            "sudo mkdir -p ${FRONTEND_DIR} && sudo rm -rf ${FRONTEND_DIR}/*"
+
+                        scp -o StrictHostKeyChecking=no -i "$SSH_KEY" -r \
+                            arcis_frontend_R-D/build/* \
+                            ${DEPLOY_USER}@${DEPLOY_HOST}:${FRONTEND_DIR}/
                     '''
                 }
             }
@@ -64,43 +76,50 @@ pipeline {
 
         stage('Configure Nginx') {
             steps {
-                echo 'Setting up Nginx...'
-                sshagent(credentials: ['deploy-ssh-key']) {
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST bash << 'ENDSSH'
+                echo 'Configuring Nginx...'
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no -i "\$SSH_KEY" \
+                            ${DEPLOY_USER}@${DEPLOY_HOST} bash -s << 'ENDSSH'
+
 if ! command -v nginx > /dev/null; then
-    sudo apt update
-    sudo apt install nginx -y
+    sudo apt-get update -y
+    sudo apt-get install nginx -y
 fi
 
-FRONTEND_CONF=/etc/nginx/sites-available/electionarcis
-sudo bash -c "cat > $FRONTEND_CONF" << 'EOL'
+sudo tee /etc/nginx/sites-available/electionarcis > /dev/null << 'NGINXCONF'
 server {
     listen 80;
     server_name _;
+
     root /var/www/html;
     index index.html index.htm;
 
     location / {
-        try_files $uri /index.html;
+        try_files \$uri /index.html;
     }
 
     location /api/ {
         proxy_pass http://127.0.0.1:3000/;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
     }
 }
-EOL
+NGINXCONF
 
-sudo ln -sf /etc/nginx/sites-available/electionarcis /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/electionarcis /etc/nginx/sites-enabled/electionarcis
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl restart nginx
+
 ENDSSH
-                    '''
+                    """
                 }
             }
         }
@@ -108,13 +127,18 @@ ENDSSH
         stage('Deploy Backend') {
             steps {
                 echo 'Deploying backend...'
-                sshagent(credentials: ['deploy-ssh-key']) {
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST \
-                            "sudo mkdir -p $BACKEND_DIR && rm -rf $BACKEND_DIR/*"
-                        scp -o StrictHostKeyChecking=no -r \
-                            $PROJECT_DIR/arcis_backend_R-D/* \
-                            $DEPLOY_USER@$DEPLOY_HOST:$BACKEND_DIR/
+                        ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" \
+                            ${DEPLOY_USER}@${DEPLOY_HOST} \
+                            "sudo mkdir -p ${BACKEND_DIR} && sudo rm -rf ${BACKEND_DIR}/*"
+
+                        scp -o StrictHostKeyChecking=no -i "$SSH_KEY" -r \
+                            arcis_backend_R-D/* \
+                            ${DEPLOY_USER}@${DEPLOY_HOST}:${BACKEND_DIR}/
                     '''
                 }
             }
@@ -122,14 +146,19 @@ ENDSSH
 
         stage('Restart Backend Service') {
             steps {
-                echo 'Restarting backend via systemd...'
-                sshagent(credentials: ['deploy-ssh-key']) {
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST bash << 'ENDSSH'
+                echo 'Restarting backend service...'
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'deploy-ssh-key',
+                    keyFileVariable: 'SSH_KEY'
+                )]) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no -i "\$SSH_KEY" \
+                            ${DEPLOY_USER}@${DEPLOY_HOST} bash -s << 'ENDSSH'
+
 SERVICE_FILE=/etc/systemd/system/electionarcis.service
 
-if [ ! -f $SERVICE_FILE ]; then
-    sudo bash -c "cat > $SERVICE_FILE" << 'EOL'
+if [ ! -f \$SERVICE_FILE ]; then
+    sudo tee \$SERVICE_FILE > /dev/null << 'SERVICECONF'
 [Unit]
 Description=ElectionArcis Backend Service
 After=network.target
@@ -139,20 +168,24 @@ User=deploy
 WorkingDirectory=/var/www/electionarcis
 ExecStart=/usr/bin/node server.js
 Restart=always
+RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=3000
 
 [Install]
 WantedBy=multi-user.target
-EOL
+SERVICECONF
+
     sudo systemctl daemon-reload
     sudo systemctl enable electionarcis
 fi
 
 sudo systemctl restart electionarcis
+sleep 3
 sudo systemctl status electionarcis --no-pager
+
 ENDSSH
-                    '''
+                    """
                 }
             }
         }
@@ -160,10 +193,10 @@ ENDSSH
 
     post {
         success {
-            echo 'Deployment completed successfully!'
+            echo '✅ Deployment completed successfully!'
         }
         failure {
-            echo 'Deployment FAILED. Check logs above.'
+            echo '❌ Deployment FAILED. Check logs above.'
         }
     }
 }
