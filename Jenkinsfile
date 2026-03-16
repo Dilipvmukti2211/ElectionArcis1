@@ -4,8 +4,8 @@ pipeline {
     environment {
         DEPLOY_USER = "deploy"
         DEPLOY_HOST = "fail.vmukti.com"
-        FRONTEND_DIR = "/home/vmukti/electionarcis/frontend"
-        BACKEND_DIR = "/home/vmukti/electionarcis/backend"
+        FRONTEND_DIR = "/home/deploy/electionarcis/frontend"
+        BACKEND_DIR = "/home/deploy/electionarcis/backend"
     }
 
     stages {
