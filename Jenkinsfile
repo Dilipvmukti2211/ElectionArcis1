@@ -45,6 +45,24 @@ pipeline {
             }
         }
 
+        stage('Create Frontend ENV') {
+            steps {
+                dir("${FRONTEND_DIR}") {
+                    sh '''
+                    cat <<EOF > .env
+REACT_APP_URL=http://localhost:8082
+REACT_APP_BASE_URL=http://localhost:8082
+REACT_APP_GOOGLE_MAPS_KEY=AIzaSyD2CF3PlGBd0tQhusHwX3ngfPaad0pmJ_Q
+REACT_APP_ENCRYPT_KEY=
+REACT_APP_IV=
+REACT_APP_DECRYPT_KEY=
+REACT_APP_D_IV=
+EOF
+                    '''
+                }
+            }
+        }
+
         stage('Install Backend Dependencies') {
             steps {
                 dir("${BACKEND_DIR}") {
