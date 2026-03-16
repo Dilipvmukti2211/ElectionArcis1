@@ -37,9 +37,10 @@ app.use(
       "http://localhost:3001",
       "https://98.70.50.122:3002",
       "https://fail.vmukti.com:3002",
-     "https://fail.vmukti.com",
+     "http://fail.vmukti.com",
      "https://fail.vmukti.com:443",
       '*',
+      "http://fail.vmukti.com:3000",
     ],
     credentials: true,
   })
